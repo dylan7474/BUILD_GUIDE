@@ -1,0 +1,59 @@
+Compiling and Uploading ESP32 Code with Arduino-CLI
+This guide will walk you through compiling and uploading a sketch to your ESP32 board using the arduino-cli you installed with the setup script.
+
+1. Find Your Board's FQBN (Fully Qualified Board Name)
+The FQBN is a unique identifier for your specific board model. You need it for the compile command.
+
+To list all available ESP32 boards and their FQBNs, run:
+
+arduino-cli board listall esp32
+
+You will see a long list. Look for your board. A generic esp32 board often uses:
+esp32:esp32:esp32
+
+Another common one is the ESP32-S3 Dev Module:
+esp32:esp32:esp32s3
+
+Find the one that matches your hardware.
+
+2. Find Your Board's Port
+Connect your ESP32 board to your computer via USB. Then, run this command to see connected boards and their serial ports:
+
+arduino-cli board list
+
+The output will look something like this. The port is what you need (e.g., /dev/ttyUSB0).
+
+Port         Protocol Type              Board Name FQBN Core
+/dev/ttyUSB0 serial   Serial Port (USB) Unknown
+
+Troubleshooting: If you see "permission denied" when trying to upload, you need to add your user to the dialout group:
+
+sudo usermod -a -G dialout $USER
+
+You will need to log out and log back in for this change to take effect.
+
+3. Compile Your Sketch
+Navigate to the directory containing your .ino file. For this example, let's assume your sketch is named MyProject.ino and your board's FQBN is esp32:esp32:esp32.
+
+Run the compile command:
+
+arduino-cli compile --fqbn esp32:esp32:esp32 MyProject.ino
+
+If successful, arduino-cli will create a build directory with the compiled binary files.
+
+4. Upload Your Sketch to the Board
+Now, combine the FQBN and the port you found earlier to upload the code.
+
+arduino-cli upload --fqbn esp32:esp32:esp32 --port /dev/ttyUSB0 MyProject.ino
+
+Some boards require you to hold down the "BOOT" button when the upload process begins. The CLI will show output like Connecting........_____......
+
+All-in-One Command
+You can also compile and upload in a single step by just using the upload command. It will automatically compile first.
+
+# This single command compiles and then uploads the sketch
+arduino-cli upload -b esp32:esp32:esp32 -p /dev/ttyUSB0 YourSketch/
+
+(Note: -b is a shorthand for --fqbn and -p is for --port)
+
+You're all set! You can now compile and upload projects to your ESP32 from the command line.
