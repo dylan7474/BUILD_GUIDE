@@ -17,7 +17,6 @@ print_done() {
 }
 
 # --- Helper: retry with backoff ---
-# This function is used for network-dependent commands to make them more robust.
 retry () {
   local attempts="$1"; shift
   local sleep_s="$1"; shift
@@ -33,16 +32,17 @@ retry () {
   done
 }
 
+
 # 1. System Setup
 print_section "1. Updating and Installing Required Packages"
 
 sudo apt-get update
-# Added curl, ca-certificates, git, python3, and xz-utils for Arduino CLI support
+# Added dependencies for Arduino CLI: curl, ca-certificates, python3, xz-utils
 sudo apt-get install -y \
     mingw-w64 build-essential \
     libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
     libsdl2-ttf-dev libcurl4-openssl-dev libfftw3-dev \
-    xxd wine unzip wget tar curl ca-certificates git python3 xz-utils
+    xxd wine unzip wget tar curl ca-certificates python3 xz-utils
 
 print_done
 
@@ -86,7 +86,6 @@ for f in *.tar.gz; do tar -xf "$f"; done
 # Build core SDL2 for Windows
 print_section "3.1 Building SDL2 for MinGW"
 cd SDL2-${SDL_VER}
-# FIXED: Corrected the host from x88_64 to x86_64
 ./configure --host=x86_64-w64-mingw32 --prefix=/usr/x86_64-w64-mingw32
 make -j$(nproc)
 sudo make install
@@ -133,29 +132,45 @@ rm -rf fftw-3.3.10*
 
 print_done
 
-# 6. Optional: Install Arduino/ESP32 Tools
-read -p "Do you want to install the Arduino CLI for ESP32 development? [y/N] " arduino_choice
+# 6. Optional: Install Arduino CLI and ESP32 Core
+read -p "Do you want to install Arduino CLI and ESP32 Core? [y/N] " arduino_choice
 if [[ "$arduino_choice" =~ ^[Yy]$ ]]; then
     print_section "6. Installing Arduino CLI and ESP32 Core"
 
-    echo "Downloading and installing arduino-cli..."
-    curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+    echo "Removing any old version of arduino-cli to ensure a clean install..."
+    sudo rm -f /usr/local/bin/arduino-cli
+
+    echo "Downloading and installing a specific version of arduino-cli (0.35.3)..."
+    curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh -s -- 0.35.3
+    # Then move to a system-wide location
     sudo install -m 0755 bin/arduino-cli /usr/local/bin/arduino-cli
     rm -rf bin
+
+    # Rehash shell's path to find the new executable
+    hash -r
+
     echo "arduino-cli version: $(arduino-cli version)"
-    
+
     echo "Initializing arduino-cli configuration..."
     arduino-cli config init --overwrite
-    
+
     echo "Adding ESP32 board manager URL..."
     arduino-cli config set board_manager.additional_urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-    
+
+    echo "Increasing network timeout for large downloads..."
+    CONFIG_FILE="$HOME/.arduino15/arduino-cli.yaml"
+    if [ -f "$CONFIG_FILE" ]; then
+        echo -e "\nnetwork:\n  timeout: 30m" >> "$CONFIG_FILE"
+    else
+        echo "Warning: Could not find arduino-cli config file at $CONFIG_FILE"
+    fi
+
     echo "Updating core indexes (will retry on failure)..."
     retry 5 5 arduino-cli core update-index
-    
+
     echo "Installing ESP32 core (will retry on failure)..."
     retry 5 5 arduino-cli core install esp32:esp32
-    
+
     echo "Installing common libraries (will retry on failure)..."
     retry 5 5 arduino-cli lib install "Adafruit GFX Library"
     retry 5 5 arduino-cli lib install "ArduinoJson"
@@ -164,20 +179,18 @@ if [[ "$arduino_choice" =~ ^[Yy]$ ]]; then
 
     print_done
 else
-    echo "Skipping Arduino/ESP32 tool installation."
+    echo "Skipping Arduino/ESP32 installation."
 fi
 
 
-# 7. Finalization
+# 7. Final steps
 print_section "7. Environment Ready"
 
 echo -e "${YELLOW}Tips:${RESET}"
 echo "- Use 'xxd -i your_asset > asset.h' to embed files."
 echo "- Use Makefile.linux or Makefile.win for your platform."
 echo "- Test Windows builds with Wine: wine game.exe"
-if [[ "$arduino_choice" =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}Arduino Tip:${RESET} See the README-ESP32-Compile.md file for instructions."
-fi
+echo "- For ESP32, see the README-ESP32-Compile.md guide."
 
 print_done
 
