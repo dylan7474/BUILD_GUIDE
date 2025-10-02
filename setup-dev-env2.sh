@@ -86,7 +86,8 @@ for f in *.tar.gz; do tar -xf "$f"; done
 # Build core SDL2 for Windows
 print_section "3.1 Building SDL2 for MinGW"
 cd SDL2-${SDL_VER}
-./configure --host=x88_64-w64-mingw32 --prefix=/usr/x86_64-w64-mingw32
+# FIXED: Corrected the host from x88_64 to x86_64
+./configure --host=x86_64-w64-mingw32 --prefix=/usr/x86_64-w64-mingw32
 make -j$(nproc)
 sudo make install
 cd ..
@@ -179,3 +180,4 @@ if [[ "$arduino_choice" =~ ^[Yy]$ ]]; then
 fi
 
 print_done
+
