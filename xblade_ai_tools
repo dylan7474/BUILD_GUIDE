@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # This script installs the NVIDIA CUDA Toolkit, Ollama, and Open WebUI.
-# It should be run on a fresh Ubuntu 22.04 installation after running
-# your initial development environment setup script.
+# It is designed to run in two stages to handle reboots required for permissions.
+#
+# STAGE 1 (this script): Installs all software.
+# STAGE 2 (run by you after reboot): Starts the Open WebUI container.
 
 set -e
 
 # --- Configuration ---
-# You can change this to a different version if needed.
-# Check the NVIDIA website for the latest compatible version for your hardware.
 CUDA_VERSION="12-5"
 
 
@@ -29,63 +29,39 @@ print_done() {
     echo -e "${GREEN}✔ Done.${RESET}"
 }
 
-# --- 1. NVIDIA CUDA Toolkit Installation ---
+
+# --- PART 1 FUNCTIONS ---
+
 install_cuda() {
     print_section "Installing NVIDIA CUDA Toolkit v${CUDA_VERSION}"
-
-    # Check for an existing NVIDIA driver
     if ! command -v nvidia-smi &> /dev/null; then
         echo -e "${YELLOW}WARNING: No NVIDIA driver detected. The script will install the CUDA toolkit, which includes a driver.${RESET}"
-        echo -e "${YELLOW}It is highly recommended to install the proprietary NVIDIA drivers from 'Additional Drivers' first.${RESET}"
         read -p "Press [Enter] to continue, or [Ctrl+C] to exit."
     else
         echo "NVIDIA driver detected."
-        nvidia-smi
     fi
 
-    # Add NVIDIA's repository
     wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
     sudo dpkg -i cuda-keyring_1.1-1_all.deb
     sudo apt-get update
-
-    # Install CUDA toolkit
-    # The 'cuda-toolkit-12-5' package contains the compiler and development libraries.
-    # The 'cuda-drivers' package ensures a compatible driver is installed.
     echo "Installing CUDA toolkit. This may take a significant amount of time..."
     sudo apt-get -y install cuda-toolkit-${CUDA_VERSION}
 
-    # Add CUDA to the system path for all users
     echo 'export PATH=/usr/local/cuda/bin${PATH:+:${PATH}}' | sudo tee /etc/profile.d/cuda.sh
     echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' | sudo tee -a /etc/profile.d/cuda.sh
-
-    # Clean up
     rm cuda-keyring_1.1-1_all.deb
-
-    echo -e "${YELLOW}CUDA has been installed. Please reboot your system for the changes to take full effect.${RESET}"
     print_done
 }
 
-
-# --- 2. Ollama Installation ---
 install_ollama() {
     print_section "Installing Ollama"
-
-    # Download and run the official Ollama installer script
     curl -fsSL https://ollama.com/install.sh | sh
-
-    echo "Ollama service has been installed and started."
-    echo "You can interact with it using 'ollama run <model_name>'."
     print_done
 }
 
-
-# --- 3. Docker and Open WebUI Installation ---
-install_open_webui() {
-    print_section "Installing Open WebUI (with Docker)"
-
-    # --- Docker Installation ---
+install_docker() {
+    print_section "Installing Docker"
     if ! command -v docker &> /dev/null; then
-        echo "Docker not found. Installing Docker..."
         sudo apt-get update
         sudo apt-get install -y ca-certificates curl
         sudo install -m 0755 -d /etc/apt/keyrings
@@ -99,39 +75,69 @@ install_open_webui() {
         sudo apt-get update
         sudo apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-        # Add current user to the docker group to avoid using sudo
+        echo "Adding current user ($USER) to the 'docker' group..."
         sudo usermod -aG docker $USER
-        echo -e "${YELLOW}You have been added to the 'docker' group. You will need to log out and log back in for this to take effect.${RESET}"
     else
         echo "Docker is already installed."
     fi
-
-    # --- Open WebUI Installation ---
-    echo "Pulling the Open WebUI Docker image and starting the container..."
-    # We use --gpus=all to ensure the container can access the NVIDIA GPU
-    # This is necessary for hardware acceleration with Ollama
-    docker run -d -p 3000:8080 --gpus=all -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
-
     print_done
 }
 
-# --- Main Execution ---
-main() {
-    install_cuda
-    install_ollama
-    install_open_webui
 
-    print_section "Installation Complete!"
-    echo -e "${GREEN}Summary:${RESET}"
-    echo "- NVIDIA CUDA Toolkit has been installed."
-    echo "- Ollama service is running."
-    echo "- Open WebUI is running in a Docker container."
-    echo ""
-    echo -e "${YELLOW}IMPORTANT NEXT STEPS:${RESET}"
-    echo "1. ${YELLOW}Reboot your computer${RESET} to apply CUDA path changes and new group memberships."
-    echo "2. After rebooting, open a web browser and navigate to ${CYAN}http://localhost:3000${RESET} to access Open WebUI."
-    echo "3. The first account created on Open WebUI will be the administrator account."
-    echo "4. Inside Open WebUI, you will be able to connect to the local Ollama instance and download models."
+# --- PART 2 FUNCTION ---
+
+run_open_webui() {
+    print_section "Starting Open WebUI Container"
+    echo "Pulling the Open WebUI Docker image and starting the container..."
+    
+    # Check if the container already exists
+    if [ "$(docker ps -a -q -f name=open-webui)" ]; then
+        echo "An existing 'open-webui' container was found. Removing it before starting a new one."
+        docker rm -f open-webui
+    fi
+    
+    docker run -d -p 3000:8080 --gpus=all -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
+    echo "Waiting a few seconds for the container to initialize..."
+    sleep 5
+    
+    # Verify it's running
+    if [ "$(docker ps -q -f name=open-webui)" ]; then
+        echo -e "${GREEN}✔ Open WebUI container is running successfully!${RESET}"
+        echo "You can now access it at: ${CYAN}http://localhost:3000${RESET}"
+    else
+        echo -e "${YELLOW}Error: The Open WebUI container failed to start. Check logs with 'docker logs open-webui'${RESET}"
+    fi
 }
 
-main
+
+# --- MAIN EXECUTION LOGIC ---
+
+# This script uses an argument to decide which part to run.
+# If run with "post-reboot", it runs the second part.
+# Otherwise, it runs the first part and gives instructions.
+
+if [ "$1" == "post-reboot" ]; then
+    # --- STAGE 2: Run after rebooting ---
+    run_open_webui
+else
+    # --- STAGE 1: Initial Installation ---
+    install_cuda
+    install_ollama
+    install_docker
+
+    print_section "ACTION REQUIRED: Please Follow These Steps"
+    echo -e "${YELLOW}The initial installation is complete. A reboot is required for two reasons:${RESET}"
+    echo "1. To finalize the CUDA Toolkit installation and apply its system path."
+    echo "2. To apply your user's new membership to the 'docker' group."
+    echo ""
+    echo -e "${CYAN}------------------------- YOUR NEXT STEPS -------------------------${RESET}"
+    echo -e "1. ${GREEN}Reboot your computer now.${RESET}"
+    echo ""
+    echo -e "2. After you log back in, open a new terminal and run this exact command"
+    echo -e "   to start the Open WebUI service:"
+    echo ""
+    echo -e "   ${GREEN}./install-ai-tools.sh post-reboot${RESET}"
+    echo -e "${CYAN}-------------------------------------------------------------------${RESET}"
+    echo ""
+fi
+
