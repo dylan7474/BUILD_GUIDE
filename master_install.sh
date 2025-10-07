@@ -149,12 +149,18 @@ install_docker_and_nvidia_toolkit() {
 
 install_comfyui() {
     print_section "Installing ComfyUI (for advanced workflows)"
-    mkdir -p "$COMFYUI_DIR"
+    
+    # Check if the directory exists and is already a valid git repository
     if [ -d "$COMFYUI_DIR/.git" ]; then
-        echo "ComfyUI directory already exists. Checking contents..."
+        echo "ComfyUI repository already exists. Skipping clone."
     else
+        # If the directory exists but is not a repo (failed clone), remove it first
+        if [ -d "$COMFYUI_DIR" ]; then
+            echo "Found an incomplete ComfyUI directory. Cleaning up before re-cloning..."
+            rm -rf "$COMFYUI_DIR"
+        fi
+        
         echo "Cloning ComfyUI repository..."
-        # Clone into the target directory
         git clone https://github.com/comfyanonymous/ComfyUI.git "$COMFYUI_DIR"
     fi
     
@@ -187,9 +193,18 @@ install_comfyui() {
 
 install_automatic1111() {
     print_section "Installing Automatic1111 Web UI (for easy-to-use interface)"
+
+    # Check if the directory exists and is already a valid git repository
     if [ -d "$A1111_DIR/.git" ]; then
-        echo "Automatic1111 directory already exists. Skipping clone."
+        echo "Automatic1111 repository already exists. Skipping clone."
     else
+        # If the directory exists but is not a repo (failed clone), remove it first
+        if [ -d "$A1111_DIR" ]; then
+            echo "Found an incomplete Automatic1111 directory. Cleaning up before re-cloning..."
+            rm -rf "$A1111_DIR"
+        fi
+        
+        echo "Cloning Automatic1111 repository..."
         git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git "$A1111_DIR"
     fi
     
@@ -237,7 +252,7 @@ run_open_webui() {
     
     # Use --network=host to connect to the host's ollama service
     # Use -e OLLAMA_BASE_URL to explicitly point to the host's service
-    docker run -d --network=host -e OLLAMA_BASE_URL=http://127.0.0.1:11434 --gpus=all -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
+    docker run -d --network=host -e OLLAMA_BASE_URL=http://127.0.C0.A8.32.05:11434 --gpus=all -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
     echo "Waiting a few seconds for the container to initialize..."
     sleep 5
     
