@@ -6,7 +6,7 @@
 # This script consolidates multiple setups into one. It installs:
 # 1. A C/C++ cross-compilation environment (MinGW, SDL2, etc.).
 # 2. Inform7 for interactive fiction development.
-# 3. btop++ for advanced system and GPU monitoring.
+# 3. btop++ for advanced system and GPU monitoring (built from source).
 # 4. The NVIDIA CUDA Toolkit.
 # 5. Docker and the NVIDIA Container Toolkit for GPU acceleration.
 # 6. A direct, high-performance ComfyUI setup for image/video generation.
@@ -28,8 +28,8 @@ CUDA_VERSION="12-5"
 INSTALL_DIR="$HOME/ai-tools"
 COMFYUI_DIR="$INSTALL_DIR/ComfyUI"
 VENV_DIR="$COMFYUI_DIR/venv"
-SD_MODEL_URL="https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
-SVD_MODEL_URL="https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt/resolve/main/svd_xt.safetensors"
+SD_MODEL_URL="https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safensors"
+SVD_MODEL_URL="https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt/resolve/main/svd_xt.safensors"
 CHECKPOINTS_DIR="$COMFYUI_DIR/models/checkpoints"
 
 # --- Colors for Readability ---
@@ -64,10 +64,18 @@ install_system_deps() {
 }
 
 install_btop() {
-    print_section "Installing btop++ with GPU support"
-    sudo add-apt-repository -y ppa:aristocratos/btop
-    sudo apt-get update
-    sudo apt-get install -y btop
+    print_section "Installing btop++ by building from source (for GPU support)"
+    cd /tmp
+    # Clone the official repository
+    git clone https://github.com/aristocratos/btop.git
+    cd btop
+    # Compile the source code
+    make
+    # Install the compiled binary to the system
+    sudo make install
+    # Clean up the temporary files
+    cd /tmp
+    rm -rf btop
     print_done
 }
 
