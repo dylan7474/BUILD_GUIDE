@@ -85,7 +85,8 @@ install_inform7() {
     cd /tmp
     wget http://emshort.com/inform-app-archive/6M62/I7_6M62_Linux_all.tar.gz
     tar -xzf I7_6M62_Linux_all.tar.gz
-    cd inform7-6M2
+    # Corrected directory name from inform7-6M2 to inform7-6M62
+    cd inform7-6M62
     sudo ./install-inform7.sh
     # Add Inform7 to the system-wide path for all users
     echo 'export PATH=$PATH:/usr/local/share/inform7/Compilers' | sudo tee /etc/profile.d/inform7.sh
@@ -149,13 +150,21 @@ install_docker_and_nvidia_toolkit() {
 install_comfyui() {
     print_section "Installing ComfyUI (for advanced workflows)"
     mkdir -p "$COMFYUI_DIR"
-    if [ -d "$COMFYUI_DIR" ]; then
+    if [ -d "$COMFYUI_DIR/.git" ]; then
         echo "ComfyUI directory already exists. Checking contents..."
     else
         echo "Cloning ComfyUI repository..."
+        # Clone into the target directory
         git clone https://github.com/comfyanonymous/ComfyUI.git "$COMFYUI_DIR"
     fi
+    
     cd "$COMFYUI_DIR"
+
+    # Add a check for the requirements file to prevent errors
+    if [ ! -f "requirements.txt" ]; then
+        echo -e "${YELLOW}Error: requirements.txt not found in $COMFYUI_DIR. The git clone may have failed.${RESET}"
+        exit 1
+    fi
     
     python3 -m venv venv
     source venv/bin/activate
@@ -178,7 +187,7 @@ install_comfyui() {
 
 install_automatic1111() {
     print_section "Installing Automatic1111 Web UI (for easy-to-use interface)"
-    if [ -d "$A1111_DIR" ]; then
+    if [ -d "$A1111_DIR/.git" ]; then
         echo "Automatic1111 directory already exists. Skipping clone."
     else
         git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git "$A1111_DIR"
@@ -189,10 +198,16 @@ install_automatic1111() {
     mkdir -p "$A1111_MODEL_DIR"
     
     SD_MODEL_PATH="$CHECKPOINTS_DIR/sd_xl_base_1.0.safetensors"
+    SVD_MODEL_PATH="$CHECKPOINTS_DIR/svd_xt.safetensors"
     
     if [ -f "$SD_MODEL_PATH" ] && [ ! -L "$A1111_MODEL_DIR/sd_xl_base_1.0.safetensors" ]; then
         echo "Linking SDXL model to Automatic1111..."
         ln -s "$SD_MODEL_PATH" "$A1111_MODEL_DIR/sd_xl_base_1.0.safetensors"
+    fi
+
+    if [ -f "$SVD_MODEL_PATH" ] && [ ! -L "$A1111_MODEL_DIR/svd_xt.safetensors" ]; then
+        echo "Linking SVD model to Automatic1111..."
+        ln -s "$SVD_MODEL_PATH" "$A1111_MODEL_DIR/svd_xt.safetensors"
     fi
     print_done
 }
