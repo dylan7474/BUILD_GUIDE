@@ -9,9 +9,10 @@
 # 3. btop++ for advanced system and GPU monitoring (built from source).
 # 4. The NVIDIA CUDA Toolkit.
 # 5. Docker and the NVIDIA Container Toolkit for GPU acceleration.
-# 6. A direct, high-performance ComfyUI setup for image/video generation.
-# 7. Ollama for local LLM inference (configured for GPU usage).
-# 8. A post-reboot command to launch the Open WebUI Docker container.
+# 6. Automatic1111 Web UI (for an easy-to-use Stable Diffusion interface).
+# 7. ComfyUI (for a high-performance, node-based Stable Diffusion interface).
+# 8. Ollama for local LLM inference (configured for GPU usage).
+# 9. A post-reboot command to launch the Open WebUI Docker container.
 #
 # USAGE:
 # 1. Save this script as master_install.sh in your home directory or downloads.
@@ -27,9 +28,9 @@ set -e
 CUDA_VERSION="12-5"
 INSTALL_DIR="$HOME/ai-tools"
 COMFYUI_DIR="$INSTALL_DIR/ComfyUI"
-VENV_DIR="$COMFYUI_DIR/venv"
-SD_MODEL_URL="https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safensors"
-SVD_MODEL_URL="https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt/resolve/main/svd_xt.safensors"
+A1111_DIR="$INSTALL_DIR/automatic1111"
+SD_MODEL_URL="https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
+SVD_MODEL_URL="https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt/resolve/main/svd_xt.safetensors"
 CHECKPOINTS_DIR="$COMFYUI_DIR/models/checkpoints"
 
 # --- Colors for Readability ---
@@ -84,7 +85,7 @@ install_inform7() {
     cd /tmp
     wget http://emshort.com/inform-app-archive/6M62/I7_6M62_Linux_all.tar.gz
     tar -xzf I7_6M62_Linux_all.tar.gz
-    cd inform7-6M62
+    cd inform7-6M2
     sudo ./install-inform7.sh
     # Add Inform7 to the system-wide path for all users
     echo 'export PATH=$PATH:/usr/local/share/inform7/Compilers' | sudo tee /etc/profile.d/inform7.sh
@@ -146,7 +147,7 @@ install_docker_and_nvidia_toolkit() {
 }
 
 install_comfyui() {
-    print_section "Installing ComfyUI"
+    print_section "Installing ComfyUI (for advanced workflows)"
     mkdir -p "$COMFYUI_DIR"
     if [ -d "$COMFYUI_DIR" ]; then
         echo "ComfyUI directory already exists. Checking contents..."
@@ -171,6 +172,27 @@ install_comfyui() {
         echo "ComfyUI-Manager already exists."
     else
         git clone https://github.com/ltdrdata/ComfyUI-Manager.git "$COMFYUI_DIR/custom_nodes/ComfyUI-Manager"
+    fi
+    print_done
+}
+
+install_automatic1111() {
+    print_section "Installing Automatic1111 Web UI (for easy-to-use interface)"
+    if [ -d "$A1111_DIR" ]; then
+        echo "Automatic1111 directory already exists. Skipping clone."
+    else
+        git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git "$A1111_DIR"
+    fi
+    
+    # Share models from ComfyUI to save space by creating symbolic links
+    A1111_MODEL_DIR="$A1111_DIR/models/Stable-diffusion"
+    mkdir -p "$A1111_MODEL_DIR"
+    
+    SD_MODEL_PATH="$CHECKPOINTS_DIR/sd_xl_base_1.0.safetensors"
+    
+    if [ -f "$SD_MODEL_PATH" ] && [ ! -L "$A1111_MODEL_DIR/sd_xl_base_1.0.safetensors" ]; then
+        echo "Linking SDXL model to Automatic1111..."
+        ln -s "$SD_MODEL_PATH" "$A1111_MODEL_DIR/sd_xl_base_1.0.safetensors"
     fi
     print_done
 }
@@ -219,20 +241,26 @@ if [ "$1" == "post-reboot" ]; then
     # --- STAGE 2: Run after rebooting ---
     run_open_webui
 
-    print_section "Post-Reboot: Verifying GPU and Managing Models"
+    print_section "Post-Reboot: Verifying GPU and Managing Services"
     echo -e "${CYAN}------------------------- HOW TO USE YOUR NEW SETUP -------------------------${RESET}"
-    echo -e "1. ${GREEN}Verify Ollama is using the GPU:${RESET}"
-    echo -e "   Run a model and check the logs for GPU info:"
-    echo -e "   ${YELLOW}ollama run llama3:8b \"Why is the sky blue?\"${RESET}"
-    echo -e "   (The first run will download the model. Subsequent runs will be faster.)"
+    echo -e "You now have multiple AI tools installed. Here's how to use them:"
     echo ""
-    echo -e "2. ${GREEN}Download New Models for Open WebUI:${RESET}"
-    echo -e "   Use the 'ollama' command in your terminal:"
+    echo -e "1. ${GREEN}For an EASY-TO-USE Image Generator (Automatic1111):${RESET}"
+    echo -e "   cd $A1111_DIR"
+    echo -e "   ./webui.sh --listen"
+    echo -e "   Then open: ${YELLOW}http://<your-lan-ip>:7860${RESET}"
+    echo ""
+    echo -e "2. ${GREEN}For ADVANCED Image/Video Generation (ComfyUI):${RESET}"
+    echo -e "   cd $COMFYUI_DIR"
+    echo -e "   source venv/bin/activate"
+    echo -e "   python3 main.py --listen"
+    echo -e "   Then open: ${YELLOW}http://<your-lan-ip>:8188${RESET}"
+    echo ""
+    echo -e "3. ${GREEN}For Chat Models (Ollama & Open WebUI):${RESET}"
+    echo -e "   The Open WebUI container is already running at ${YELLOW}http://localhost:8080${RESET}"
+    echo -e "   To add new chat models, use the terminal:"
     echo -e "   ${YELLOW}ollama pull mistral${RESET}"
-    echo ""
-    echo -e "3. ${GREEN}See New Models in Open WebUI:${RESET}"
-    echo -e "   After pulling a new model, simply ${YELLOW}refresh the Open WebUI page${RESET} in your browser."
-    echo -e "   The new model will appear in the dropdown list."
+    echo -e   "   Then refresh the Open WebUI browser page."
     echo -e "${CYAN}-----------------------------------------------------------------------------${RESET}"
 
 else
@@ -243,6 +271,7 @@ else
     install_cuda
     install_docker_and_nvidia_toolkit
     install_comfyui
+    install_automatic1111
     install_ollama
 
     print_section "ACTION REQUIRED: Please Follow These Steps"
