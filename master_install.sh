@@ -6,7 +6,7 @@
 # This script consolidates multiple setups into one. It is designed to be
 # safely re-runnable and provides clear error messages.
 #
-# NEW: Replaced 'set -e' with manual error checking for better diagnostics.
+# NEW: Added explicit GPU dependency for Ollama service.
 #
 # USAGE:
 # 1. Save this script as master_install.sh.
@@ -230,8 +230,16 @@ install_automatic1111() {
 install_ollama() {
     print_section "Installing Ollama for GPU"
     curl -fsSL https://ollama.com/install.sh | sh || print_error "Ollama installation script failed."
+
+    # Configure Ollama service to wait for NVIDIA drivers
+    echo "Configuring Ollama service for robust GPU detection..."
+    sudo mkdir -p /etc/systemd/system/ollama.service.d/
+    echo -e "[Unit]\nRequires=nvidia-persistenced.service\nAfter=nvidia-persistenced.service" | sudo tee /etc/systemd/system/ollama.service.d/override.conf
+    sudo systemctl daemon-reload
+
+    # Stop the service. The reboot will allow systemd to start it correctly.
     sudo systemctl stop ollama
-    echo -e "${GREEN}✔ Ollama installed. Service will start correctly after reboot.${RESET}"
+    echo -e "${GREEN}✔ Ollama installed and configured. Service will start correctly after reboot.${RESET}"
     print_done
 }
 
