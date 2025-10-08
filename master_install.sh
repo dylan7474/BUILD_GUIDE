@@ -6,14 +6,14 @@
 # This script consolidates multiple setups into one. It is designed to be
 # safely re-runnable and provides clear error messages.
 #
-# NEW: Added explicit GPU dependency for Ollama service.
+# NEW: Permanently removed the ComfyUI-Manager installation to guarantee the
+#      simple, default user interface and prevent workflow state issues.
 #
 # USAGE:
 # 1. Save this script as master_install.sh.
 # 2. Make it executable: chmod +x master_install.sh
 # 3. Run Stage 1:      ./master_install.sh
-# 4. REBOOT your computer when prompted.
-# 5. After rebooting, run Stage 2: ./master_install.sh post-reboot
+# 4. To remove AI tools: ./master_install.sh uninstall
 # ====================================================================================
 
 
@@ -50,6 +50,30 @@ print_error() {
     echo -e "${RED}==================================================================${RESET}"
     exit 1
 }
+
+# --- UNINSTALL FUNCTION ---
+
+uninstall_ai_tools() {
+    print_section "Uninstalling AI Tools"
+    if [ -d "$INSTALL_DIR" ]; then
+        echo -e "${YELLOW}This will permanently delete the following directory and all its contents:${RESET}"
+        echo -e "${RED}$INSTALL_DIR${RESET}"
+        read -p "Are you sure you want to continue? (y/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "Removing directory..."
+            rm -rf "$INSTALL_DIR"
+            echo -e "${GREEN}✔ AI tools have been successfully uninstalled.${RESET}"
+            echo "You can now run the script again without arguments for a fresh installation."
+        else
+            echo "Uninstall cancelled."
+        fi
+    else
+        echo -e "${GREEN}AI tools directory ($INSTALL_DIR) not found. Nothing to uninstall.${RESET}"
+    fi
+    exit 0
+}
+
 
 # --- STAGE 1 FUNCTIONS ---
 
@@ -177,9 +201,7 @@ install_comfyui() {
     SVD_MODEL_PATH="$CHECKPOINTS_DIR/svd_xt.safetensors"
 
     echo "Downloading Stable Diffusion XL model (if missing)..."
-    # Use wget without an error check, as -nc can have a non-zero exit code if file exists
     wget -nc -O "$SD_MODEL_PATH" "$SD_MODEL_URL"
-    # Now, explicitly check if the file exists. If not, the download must have failed.
     if [ ! -f "$SD_MODEL_PATH" ]; then
         print_error "Failed to download SDXL model. Please check the URL or your network connection."
     fi
@@ -190,11 +212,8 @@ install_comfyui() {
         print_error "Failed to download SVD model. Please check the URL or your network connection."
     fi
 
-    if [ -d "$COMFYUI_DIR/custom_nodes/ComfyUI-Manager/.git" ]; then
-        echo "ComfyUI-Manager already exists."
-    else
-        git clone https://github.com/ltdrdata/ComfyUI-Manager.git "$COMFYUI_DIR/custom_nodes/ComfyUI-Manager" || print_error "Failed to clone ComfyUI-Manager."
-    fi
+    # ComfyUI-Manager is no longer installed by default to ensure the standard UI is used.
+    # If you want it, you must manually clone it into the custom_nodes directory.
     print_done
 }
 
@@ -265,6 +284,7 @@ run_open_webui() {
 
 # --- MAIN EXECUTION LOGIC ---
 
+# Check for uninstall, post-reboot, or default install
 if [ "$1" == "post-reboot" ]; then
     run_open_webui
     print_section "Post-Reboot: How to Use Your New Setup"
@@ -273,12 +293,15 @@ if [ "$1" == "post-reboot" ]; then
     echo -e "   Then open: ${YELLOW}http://<your-lan-ip>:7860${RESET}"
     echo ""
     echo -e "2. ${GREEN}ADVANCED Image/Video (ComfyUI):${RESET}"
+    echo -e "   This will now always start with the clean, default workflow."
     echo -e "   cd $COMFYUI_DIR && source venv/bin/activate && python3 main.py --listen"
     echo -e "   Then open: ${YELLOW}http://<your-lan-ip>:8188${RESET}"
     echo ""
     echo -e "3. ${GREEN}Chat Models (Ollama & Open WebUI):${RESET}"
     echo -e "   Open WebUI is running at ${YELLOW}http://localhost:8080${RESET}"
     echo -e "   To add new models: ${YELLOW}ollama pull mistral${RESET}, then refresh the page."
+elif [ "$1" == "uninstall" ]; then
+    uninstall_ai_tools
 else
     # --- STAGE 1: Initial Installation ---
     install_system_deps
