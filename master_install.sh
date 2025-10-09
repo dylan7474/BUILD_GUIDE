@@ -6,8 +6,8 @@
 # This script consolidates multiple setups into one. It is designed to be
 # safely re-runnable and provides clear error messages.
 #
-# NEW: The script now enables the 'nvidia-persistenced' service to ensure the
-#      Ollama service starts reliably after a reboot.
+# NEW: Now automatically creates 'start_automatic1111.sh' and 'start_comfyui.sh'
+#      launcher scripts in the user's home directory.
 #
 # USAGE:
 # 1. Save this script as master_install.sh.
@@ -54,9 +54,9 @@ print_error() {
 # --- UNINSTALL FUNCTION ---
 
 uninstall_ai_tools() {
-    print_section "Uninstalling AI Tools"
+    print_section "Uninstalling AI Tools and Launcher Scripts"
     if [ -d "$INSTALL_DIR" ]; then
-        echo -e "${YELLOW}This will permanently delete the following directory and all its contents:${RESET}"
+        echo -e "${YELLOW}This will permanently delete the AI tools directory:${RESET}"
         echo -e "${RED}$INSTALL_DIR${RESET}"
         read -p "Are you sure you want to continue? (y/N) " -n 1 -r
         echo
@@ -64,12 +64,21 @@ uninstall_ai_tools() {
             echo "Removing directory..."
             rm -rf "$INSTALL_DIR"
             echo -e "${GREEN}✔ AI tools have been successfully uninstalled.${RESET}"
-            echo "You can now run the script again without arguments for a fresh installation."
         else
             echo "Uninstall cancelled."
         fi
     else
         echo -e "${GREEN}AI tools directory ($INSTALL_DIR) not found. Nothing to uninstall.${RESET}"
+    fi
+
+    if [ -f "$HOME/start_automatic1111.sh" ] || [ -f "$HOME/start_comfyui.sh" ]; then
+        echo -e "${YELLOW}This will also delete the launcher scripts from your home directory.${RESET}"
+        read -p "Do you want to remove the launcher scripts? (y/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            rm -f "$HOME/start_automatic1111.sh" "$HOME/start_comfyui.sh"
+            echo -e "${GREEN}✔ Launcher scripts removed.${RESET}"
+        fi
     fi
     exit 0
 }
@@ -258,7 +267,7 @@ install_ollama() {
     # Configure Ollama service to wait for NVIDIA drivers
     echo "Configuring Ollama service for robust GPU detection..."
     sudo mkdir -p /etc/systemd/system/ollama.service.d/
-    echo -e "[Unit]\nRequires=nvidia-persistenced.service\nAfter=nvidia-persistenced.service" | sudo tee /etc/systemd/system/ollama.service.d/override.conf
+    echo -e "[Unit]\nAfter=nvidia-persistenced.service\nWants=nvidia-persistenced.service" | sudo tee /etc/systemd/system/ollama.service.d/override.conf
     
     # Enable the NVIDIA persistence daemon to ensure it starts on boot
     sudo systemctl enable nvidia-persistenced.service
@@ -271,6 +280,36 @@ install_ollama() {
     echo -e "${GREEN}✔ Ollama configured. Service will start correctly after reboot.${RESET}"
     print_done
 }
+
+create_launcher_scripts() {
+    print_section "Creating Launcher Scripts"
+
+    # Create start_automatic1111.sh
+    cat << 'EOF' > "$HOME/start_automatic1111.sh"
+#!/bin/bash
+# Launcher for the Automatic1111 Stable Diffusion Web UI
+echo -e "\e[36mStarting the Automatic1111 Web UI...\e[0m"
+cd "$HOME/ai-tools/automatic1111"
+./webui.sh --listen
+EOF
+
+    # Create start_comfyui.sh
+    cat << 'EOF' > "$HOME/start_comfyui.sh"
+#!/bin/bash
+# Launcher for the ComfyUI Stable Diffusion Web UI
+echo -e "\e[36mStarting the ComfyUI Web UI...\e[0m"
+cd "$HOME/ai-tools/ComfyUI"
+source venv/bin/activate
+python3 main.py --listen
+EOF
+
+    chmod +x "$HOME/start_automatic1111.sh"
+    chmod +x "$HOME/start_comfyui.sh"
+
+    echo -e "${GREEN}✔ Created 'start_automatic1111.sh' and 'start_comfyui.sh' in your home directory.${RESET}"
+    print_done
+}
+
 
 # --- STAGE 2 FUNCTION ---
 
@@ -298,17 +337,11 @@ run_open_webui() {
 if [ "$1" == "post-reboot" ]; then
     run_open_webui
     print_section "Post-Reboot: How to Use Your New Setup"
-    echo -e "1. ${GREEN}EASY Image Generator (Automatic1111):${RESET}"
-    echo -e "   cd $A1111_DIR && ./webui.sh --listen"
-    echo -e "   Then open: ${YELLOW}http://<your-lan-ip>:7860${RESET}"
+    echo -e "Launcher scripts have been created in your home directory (~/):"
+    echo -e "${GREEN}./start_automatic1111.sh${RESET} (for the easy-to-use UI)"
+    echo -e "${GREEN}./start_comfyui.sh${RESET}      (for the advanced UI)"
     echo ""
-    echo -e "2. ${GREEN}ADVANCED Image/Video (ComfyUI):${RESET}"
-    echo -e "   cd $COMFYUI_DIR && source venv/bin/activate && python3 main.py --listen"
-    echo -e "   Then open: ${YELLOW}http://<your-lan-ip>:8188${RESET}"
-    echo ""
-    echo -e "3. ${GREEN}Chat Models (Ollama & Open WebUI):${RESET}"
-    echo -e "   Open WebUI is running at ${YELLOW}http://localhost:8080${RESET}"
-    echo -e "   To add new models: ${YELLOW}ollama pull mistral${RESET}, then refresh the page."
+    echo -e "The ${GREEN}Open WebUI${RESET} for chat is already running at ${YELLOW}http://localhost:8080${RESET}"
 elif [ "$1" == "uninstall" ]; then
     uninstall_ai_tools
 else
@@ -321,6 +354,8 @@ else
     install_comfyui
     install_automatic1111
     install_ollama
+    create_launcher_scripts
+    
     print_section "ACTION REQUIRED: Please REBOOT"
     echo -e "${YELLOW}The initial installation is complete. A reboot is required.${RESET}"
     echo ""
