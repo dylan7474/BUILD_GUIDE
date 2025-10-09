@@ -155,16 +155,36 @@ install_mingw_curl() {
     local CURL_VERSION="8.8.0_3"
     local CURL_RELEASE_TAG="v8.8.0"
     local CURL_ARCHIVE="curl-${CURL_VERSION}-win64-mingw.zip"
-    local CURL_URL="https://github.com/curl/curl-for-win/releases/download/${CURL_RELEASE_TAG}/${CURL_ARCHIVE}"
+    local CURL_MIRRORS=(
+        "https://curl.se/windows/dl-${CURL_VERSION}/${CURL_ARCHIVE}"
+        "https://github.com/curl/curl-for-win/releases/download/${CURL_RELEASE_TAG}/${CURL_ARCHIVE}"
+    )
 
     echo "Downloading ${CURL_ARCHIVE}..."
-    curl -LO "$CURL_URL" || print_error "Failed to download ${CURL_ARCHIVE}."
+    local downloaded="false"
+    for url in "${CURL_MIRRORS[@]}"; do
+        echo "  -> $url"
+        if curl -fL --retry 3 --retry-delay 2 -o "$CURL_ARCHIVE" "$url"; then
+            downloaded="true"
+            break
+        fi
+        echo "    Download failed from $url; trying next mirror."
+    done
+
+    if [[ "$downloaded" != "true" ]]; then
+        print_error "Failed to download ${CURL_ARCHIVE} from all known mirrors."
+    fi
+
+    if ! unzip -tq "$CURL_ARCHIVE" >/dev/null; then
+        print_error "Downloaded ${CURL_ARCHIVE} appears to be corrupted."
+    fi
 
     echo "Extracting libcurl archive..."
     unzip -q "$CURL_ARCHIVE" || print_error "Failed to extract ${CURL_ARCHIVE}."
 
-    local extracted_dir="curl-${CURL_VERSION}-win64-mingw"
-    if [ ! -d "$extracted_dir" ]; then
+    local extracted_dir
+    extracted_dir="$(find . -maxdepth 1 -type d -name "curl-${CURL_VERSION}-win64-mingw" -print -quit)"
+    if [ -z "$extracted_dir" ]; then
         print_error "Could not locate extracted libcurl directory."
     fi
 
