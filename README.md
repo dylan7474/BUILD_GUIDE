@@ -24,25 +24,29 @@ Running `./master_install.sh` without arguments executes the initial installatio
    it with GPU metrics enabled, and installs it globally.
 3. **Install Inform7** – Downloads the 6M62 release, runs the bundled installer,
    and exposes the compiler on `PATH` for interactive fiction development.
-4. **Install NVIDIA CUDA Toolkit 12.5** – Adds the NVIDIA apt repository, installs
+4. **Build the MinGW SDL2 stack** – Fetches the SDL2, SDL_image, SDL_mixer, and
+   SDL_ttf releases, compiles the core SDL2 library for the MinGW target, and
+   copies the prebuilt MinGW development packages into `/usr/x86_64-w64-mingw32`
+   so Windows cross-compilation projects can link against them.
+5. **Install NVIDIA CUDA Toolkit 12.5** – Adds the NVIDIA apt repository, installs
    the CUDA Toolkit (including drivers when necessary), and registers the CUDA
    binary/library paths system wide.
-5. **Install Docker and the NVIDIA Container Toolkit** – Installs Docker Engine,
+6. **Install Docker and the NVIDIA Container Toolkit** – Installs Docker Engine,
    adds the current user to the `docker` group, configures the NVIDIA container
    runtime, and restarts the Docker daemon.
-6. **Install ComfyUI** – Clones the ComfyUI repository into `~/ai-tools/ComfyUI`,
+7. **Install ComfyUI** – Clones the ComfyUI repository into `~/ai-tools/ComfyUI`,
    sets up a Python virtual environment, installs CUDA-enabled PyTorch and the
    project requirements, and downloads Stable Diffusion XL plus Stable Video
    Diffusion checkpoints.
-7. **Install AUTOMATIC1111 Stable Diffusion Web UI** – Clones the repository into
+8. **Install AUTOMATIC1111 Stable Diffusion Web UI** – Clones the repository into
    `~/ai-tools/automatic1111` and creates symbolic links to the shared
    checkpoint downloads.
-8. **Install and configure Ollama** – Installs Ollama if missing, updates its
+9. **Install and configure Ollama** – Installs Ollama if missing, updates its
    systemd unit to wait for NVIDIA drivers, enables `nvidia-persistenced`, and
    stops the service pending a reboot.
-9. **Create launcher scripts** – Generates `~/start_automatic1111.sh` and
-   `~/start_comfyui.sh` helper scripts to simplify launching the installed UIs.
-10. **Prompt for reboot** – Reminds the user to reboot and rerun the script with
+10. **Create launcher scripts** – Generates `~/start_automatic1111.sh` and
+    `~/start_comfyui.sh` helper scripts to simplify launching the installed UIs.
+11. **Prompt for reboot** – Reminds the user to reboot and rerun the script with
     the `post-reboot` argument for final setup.
 
 Stage 2 is triggered with `./master_install.sh post-reboot`. It performs the
@@ -88,8 +92,10 @@ chmod +x dev_install.sh
 ```
 
 During execution the script installs build toolchains, SDL libraries, Wine,
-Inform7, and btop; sets up Docker; installs Ollama; and launches Open WebUI in a
-Docker container bound to `http://localhost:8080`.
+Inform7, and btop; compiles and stages the MinGW-targeted SDL2 family so Windows
+cross-compilation projects can link against it; sets up Docker; installs
+Ollama; and launches Open WebUI in a Docker container bound to
+`http://localhost:8080`.
 
 ## Suggested improvements and future enhancements
 
