@@ -74,6 +74,23 @@ for your sudo password. Some stages involve large downloads (CUDA, model
 checkpoints), so ensure you have a stable Internet connection and adequate disk
 space before beginning.
 
+## Development-only installer
+
+If you only need a lightweight development environment without NVIDIA GPU
+tooling or Stable Diffusion components, run the companion script
+`dev_install.sh`. It provisions the same core development dependencies and
+configures Docker, Ollama, and Open WebUI so you can start experimenting with
+local models quickly.
+
+```bash
+chmod +x dev_install.sh
+./dev_install.sh
+```
+
+During execution the script installs build toolchains, SDL libraries, Wine,
+Inform7, and btop; sets up Docker; installs Ollama; and launches Open WebUI in a
+Docker container bound to `http://localhost:8080`.
+
 ## Suggested improvements and future enhancements
 
 * **OS and hardware validation** – Detect unsupported Ubuntu versions or missing
