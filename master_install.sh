@@ -6,8 +6,8 @@
 # This script consolidates multiple setups into one. It is designed to be
 # safely re-runnable and provides clear error messages.
 #
-# NEW: Permanently removed the ComfyUI-Manager installation to guarantee the
-#      simple, default user interface and prevent workflow state issues.
+# NEW: The script now enables the 'nvidia-persistenced' service to ensure the
+#      Ollama service starts reliably after a reboot.
 #
 # USAGE:
 # 1. Save this script as master_install.sh.
@@ -80,7 +80,7 @@ uninstall_ai_tools() {
 install_system_deps() {
     print_section "Installing System-Wide Dependencies"
     sudo apt-get update && sudo apt-get install -y \
-        build-essential mingw-w64 \
+        build-essential mingw-w64 lowdown \
         libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
         libsdl2-ttf-dev libcurl4-openssl-dev \
         xxd wine unzip git python3 python3-venv wget curl ca-certificates \
@@ -213,7 +213,6 @@ install_comfyui() {
     fi
 
     # ComfyUI-Manager is no longer installed by default to ensure the standard UI is used.
-    # If you want it, you must manually clone it into the custom_nodes directory.
     print_done
 }
 
@@ -247,18 +246,29 @@ install_automatic1111() {
 }
 
 install_ollama() {
-    print_section "Installing Ollama for GPU"
-    curl -fsSL https://ollama.com/install.sh | sh || print_error "Ollama installation script failed."
+    print_section "Installing and Configuring Ollama"
+    
+    if command -v ollama &> /dev/null; then
+        echo "Ollama is already installed. Skipping installation to protect models."
+    else
+        echo "Installing Ollama for the first time..."
+        curl -fsSL https://ollama.com/install.sh | sh || print_error "Ollama installation script failed."
+    fi
 
     # Configure Ollama service to wait for NVIDIA drivers
     echo "Configuring Ollama service for robust GPU detection..."
     sudo mkdir -p /etc/systemd/system/ollama.service.d/
     echo -e "[Unit]\nRequires=nvidia-persistenced.service\nAfter=nvidia-persistenced.service" | sudo tee /etc/systemd/system/ollama.service.d/override.conf
+    
+    # Enable the NVIDIA persistence daemon to ensure it starts on boot
+    sudo systemctl enable nvidia-persistenced.service
+
+    # Reload systemd to recognize the changes
     sudo systemctl daemon-reload
 
     # Stop the service. The reboot will allow systemd to start it correctly.
     sudo systemctl stop ollama
-    echo -e "${GREEN}✔ Ollama installed and configured. Service will start correctly after reboot.${RESET}"
+    echo -e "${GREEN}✔ Ollama configured. Service will start correctly after reboot.${RESET}"
     print_done
 }
 
@@ -293,7 +303,6 @@ if [ "$1" == "post-reboot" ]; then
     echo -e "   Then open: ${YELLOW}http://<your-lan-ip>:7860${RESET}"
     echo ""
     echo -e "2. ${GREEN}ADVANCED Image/Video (ComfyUI):${RESET}"
-    echo -e "   This will now always start with the clean, default workflow."
     echo -e "   cd $COMFYUI_DIR && source venv/bin/activate && python3 main.py --listen"
     echo -e "   Then open: ${YELLOW}http://<your-lan-ip>:8188${RESET}"
     echo ""
