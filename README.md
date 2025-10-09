@@ -101,10 +101,12 @@ Ollama; and launches Open WebUI in a Docker container bound to
 > bundle used by `dev_install.sh` ships additional static libraries such as
 > `nghttp2`, `brotli`, and `zstd`. These are copied into
 > `/usr/x86_64-w64-mingw32/{include,lib,bin}` so linkers can resolve HTTP/2 and
-> compression symbols when you link against `libcurl`. If you are linking
-> statically, remember to add the corresponding `-lnghttp2 -lbrotlidec -lzstd`
-> flags (or rely on `pkg-config --static libcurl` for the full list) to avoid
-> undefined reference errors during the final link step.
+> compression symbols when you link against `libcurl`. The installer also
+> creates aliases for the bundled `*_static.a` archives so `-l<name>` flags pick
+> them up correctly under MinGW. When linking statically, prefer
+> `x86_64-w64-mingw32-pkg-config --static --libs libcurl` (or
+> `curl-config --static --libs` from the same prefix) to pull in the full set of
+> dependencies and avoid undefined reference errors during the final link step.
 
 ## Suggested improvements and future enhancements
 

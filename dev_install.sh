@@ -219,6 +219,24 @@ install_mingw_curl() {
         echo "No additional dependency bundle detected in libcurl package."
     fi
 
+    # curl-for-win ships some static archives with a *_static.a suffix, but the
+    # MinGW linker expects the canonical lib<name>.a pattern when resolving
+    # -l<name> arguments. Create lightweight aliases so cross builds can link
+    # against libcurl's dependencies without having to rename files manually.
+    shopt -s nullglob
+    local static_lib
+    for static_lib in "$prefix/lib"/*_static.a; do
+        local canonical_lib
+        canonical_lib="${static_lib%_static.a}.a"
+        if [ ! -e "$canonical_lib" ]; then
+            echo "Creating linker alias $(basename "$canonical_lib") -> $(basename "$static_lib")"
+            sudo ln -s "$(basename "$static_lib")" "$canonical_lib" || \
+                sudo cp "$static_lib" "$canonical_lib" || \
+                print_error "Failed to create alias for $(basename "$static_lib")."
+        fi
+    done
+    shopt -u nullglob
+
     popd >/dev/null
     rm -rf "$workdir"
 
