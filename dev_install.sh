@@ -114,15 +114,30 @@ install_ollama() {
 
 run_open_webui() {
     print_section "Starting Open WebUI Container"
-    docker pull ghcr.io/open-webui/open-webui:main || print_error "Failed to pull Open WebUI Docker image."
-    if [ "$(docker ps -a -q -f name=open-webui)" ]; then
-        echo "Removing existing 'open-webui' container..."
-        docker rm -f open-webui
+    local docker_cmd=(docker)
+    if ! docker info >/dev/null 2>&1; then
+        if command -v sudo >/dev/null 2>&1; then
+            docker_cmd=(sudo docker)
+        else
+            print_error "Docker requires elevated permissions to run."
+        fi
     fi
-    docker run -d --network=host -e OLLAMA_BASE_URL=http://127.0.0.1:11434 -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main || print_error "Failed to start Open WebUI container."
+
+    "${docker_cmd[@]}" pull ghcr.io/open-webui/open-webui:main || print_error "Failed to pull Open WebUI Docker image."
+
+    local existing_container
+    existing_container="$(${docker_cmd[@]} ps -a -q -f name=open-webui)"
+    if [ -n "$existing_container" ]; then
+        echo "Removing existing 'open-webui' container..."
+        "${docker_cmd[@]}" rm -f open-webui
+    fi
+
+    "${docker_cmd[@]}" run -d --network=host -e OLLAMA_BASE_URL=http://127.0.0.1:11434 -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main || print_error "Failed to start Open WebUI container."
     echo "Waiting for container to initialize..."
     sleep 5
-    if [ "$(docker ps -q -f name=open-webui)" ]; then
+    local running_container
+    running_container="$(${docker_cmd[@]} ps -q -f name=open-webui)"
+    if [ -n "$running_container" ]; then
         echo -e "${GREEN}✔ Open WebUI container is running successfully!${RESET}"
         echo -e "Access it at: ${CYAN}http://localhost:8080${RESET}"
     else
