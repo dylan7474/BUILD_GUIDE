@@ -76,6 +76,73 @@ install_inform7() {
     print_done
 }
 
+install_mingw_sdl_stack() {
+    print_section "Installing SDL2 stack for MinGW (Windows cross-compilation)"
+
+    local prefix="/usr/x86_64-w64-mingw32"
+    local workdir
+    workdir="$(mktemp -d)" || print_error "Unable to create temporary directory for SDL2 downloads."
+
+    pushd "$workdir" >/dev/null || print_error "Failed to enter temporary directory."
+
+    local SDL2_VERSION="2.30.4"
+    local SDL2_IMAGE_VERSION="2.8.2"
+    local SDL2_MIXER_VERSION="2.8.1"
+    local SDL2_TTF_VERSION="2.22.0"
+
+    local urls=(
+        "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-${SDL2_VERSION}.tar.gz"
+        "https://github.com/libsdl-org/SDL_image/releases/download/release-${SDL2_IMAGE_VERSION}/SDL2_image-devel-${SDL2_IMAGE_VERSION}-mingw.tar.gz"
+        "https://github.com/libsdl-org/SDL_mixer/releases/download/release-${SDL2_MIXER_VERSION}/SDL2_mixer-devel-${SDL2_MIXER_VERSION}-mingw.tar.gz"
+        "https://github.com/libsdl-org/SDL_ttf/releases/download/release-${SDL2_TTF_VERSION}/SDL2_ttf-devel-${SDL2_TTF_VERSION}-mingw.tar.gz"
+    )
+
+    echo "Downloading SDL2 source and MinGW development packages..."
+    for url in "${urls[@]}"; do
+        curl -LO "$url" || print_error "Failed to download $(basename "$url")."
+    done
+
+    echo "Extracting archives..."
+    for archive in *.tar.gz; do
+        tar -xzf "$archive" || print_error "Failed to extract $archive."
+    done
+
+    local sdl_source_dir
+    sdl_source_dir="$(find . -maxdepth 1 -type d -name "SDL2-*" | head -n 1)"
+    if [ -z "$sdl_source_dir" ]; then
+        print_error "Could not locate extracted SDL2 source directory."
+    fi
+
+    pushd "$sdl_source_dir" >/dev/null || print_error "Failed to enter SDL2 source directory."
+    ./configure --host=x86_64-w64-mingw32 --prefix="$prefix" || print_error "SDL2 configure step failed."
+    make -j"$(nproc)" || print_error "SDL2 build failed."
+    sudo make install || print_error "SDL2 installation failed."
+    popd >/dev/null
+
+    sudo mkdir -p "$prefix" || print_error "Failed to create MinGW prefix at $prefix."
+
+    for pkg in SDL2_image SDL2_mixer SDL2_ttf; do
+        local pkg_dir
+        pkg_dir="$(find . -maxdepth 1 -type d -name "${pkg}*" | head -n 1)"
+        if [ -z "$pkg_dir" ]; then
+            print_error "Could not locate extracted ${pkg} package."
+        fi
+
+        if [ -d "$pkg_dir/x86_64-w64-mingw32" ]; then
+            sudo cp -R "$pkg_dir/x86_64-w64-mingw32/." "$prefix/" || print_error "Failed to copy ${pkg} MinGW files."
+        else
+            print_error "${pkg} package layout unexpected; missing x86_64-w64-mingw32 directory."
+        fi
+    done
+
+    popd >/dev/null
+    rm -rf "$workdir"
+
+    echo -e "${GREEN}✔ SDL2 MinGW libraries installed to ${prefix}.${RESET}"
+    echo "Remember to point your MinGW Makefiles to $prefix/include and $prefix/lib."
+    print_done
+}
+
 install_docker() {
     print_section "Installing Docker"
     if ! command -v docker &> /dev/null; then
@@ -150,6 +217,7 @@ run_open_webui() {
 install_system_deps
 install_btop
 install_inform7
+install_mingw_sdl_stack
 install_docker
 install_ollama
 run_open_webui
