@@ -143,6 +143,50 @@ install_mingw_sdl_stack() {
     print_done
 }
 
+install_mingw_curl() {
+    print_section "Installing libcurl for MinGW (Windows cross-compilation)"
+
+    local prefix="/usr/x86_64-w64-mingw32"
+    local workdir
+    workdir="$(mktemp -d)" || print_error "Unable to create temporary directory for libcurl download."
+
+    pushd "$workdir" >/dev/null || print_error "Failed to enter temporary directory."
+
+    local CURL_VERSION="8.8.0_3"
+    local CURL_RELEASE_TAG="v8.8.0"
+    local CURL_ARCHIVE="curl-${CURL_VERSION}-win64-mingw.zip"
+    local CURL_URL="https://github.com/curl/curl-for-win/releases/download/${CURL_RELEASE_TAG}/${CURL_ARCHIVE}"
+
+    echo "Downloading ${CURL_ARCHIVE}..."
+    curl -LO "$CURL_URL" || print_error "Failed to download ${CURL_ARCHIVE}."
+
+    echo "Extracting libcurl archive..."
+    unzip -q "$CURL_ARCHIVE" || print_error "Failed to extract ${CURL_ARCHIVE}."
+
+    local extracted_dir="curl-${CURL_VERSION}-win64-mingw"
+    if [ ! -d "$extracted_dir" ]; then
+        print_error "Could not locate extracted libcurl directory."
+    fi
+
+    sudo mkdir -p "$prefix/include" "$prefix/lib" "$prefix/bin" || \
+        print_error "Failed to create MinGW libcurl directories."
+
+    sudo cp -R "$extracted_dir/include/." "$prefix/include/" || \
+        print_error "Failed to copy libcurl headers."
+    sudo cp -R "$extracted_dir/lib/." "$prefix/lib/" || \
+        print_error "Failed to copy libcurl libraries."
+    if [ -d "$extracted_dir/bin" ]; then
+        sudo cp -R "$extracted_dir/bin/." "$prefix/bin/" || \
+            print_error "Failed to copy libcurl executables."
+    fi
+
+    popd >/dev/null
+    rm -rf "$workdir"
+
+    echo -e "${GREEN}✔ libcurl MinGW package installed to ${prefix}.${RESET}"
+    print_done
+}
+
 install_docker() {
     print_section "Installing Docker"
     if ! command -v docker &> /dev/null; then
@@ -218,6 +262,7 @@ install_system_deps
 install_btop
 install_inform7
 install_mingw_sdl_stack
+install_mingw_curl
 install_docker
 install_ollama
 run_open_webui
