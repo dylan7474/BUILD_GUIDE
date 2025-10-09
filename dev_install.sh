@@ -200,6 +200,25 @@ install_mingw_curl() {
             print_error "Failed to copy libcurl executables."
     fi
 
+    local deps_dir="$extracted_dir/deps"
+    if [ -d "$deps_dir" ]; then
+        echo "Copying bundled dependency headers and libraries (nghttp2, brotli, zstd, etc.)..."
+        if [ -d "$deps_dir/include" ]; then
+            sudo cp -R "$deps_dir/include/." "$prefix/include/" || \
+                print_error "Failed to copy libcurl dependency headers."
+        fi
+        if [ -d "$deps_dir/lib" ]; then
+            sudo cp -R "$deps_dir/lib/." "$prefix/lib/" || \
+                print_error "Failed to copy libcurl dependency libraries."
+        fi
+        if [ -d "$deps_dir/bin" ]; then
+            sudo cp -R "$deps_dir/bin/." "$prefix/bin/" || \
+                print_error "Failed to copy libcurl dependency executables."
+        fi
+    else
+        echo "No additional dependency bundle detected in libcurl package."
+    fi
+
     popd >/dev/null
     rm -rf "$workdir"
 

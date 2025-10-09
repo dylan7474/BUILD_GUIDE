@@ -97,6 +97,15 @@ cross-compilation projects can link against it; sets up Docker; installs
 Ollama; and launches Open WebUI in a Docker container bound to
 `http://localhost:8080`.
 
+> **Note for Windows cross-compilation projects:** The `curl-for-windows`
+> bundle used by `dev_install.sh` ships additional static libraries such as
+> `nghttp2`, `brotli`, and `zstd`. These are copied into
+> `/usr/x86_64-w64-mingw32/{include,lib,bin}` so linkers can resolve HTTP/2 and
+> compression symbols when you link against `libcurl`. If you are linking
+> statically, remember to add the corresponding `-lnghttp2 -lbrotlidec -lzstd`
+> flags (or rely on `pkg-config --static libcurl` for the full list) to avoid
+> undefined reference errors during the final link step.
+
 ## Suggested improvements and future enhancements
 
 * **OS and hardware validation** – Detect unsupported Ubuntu versions or missing
