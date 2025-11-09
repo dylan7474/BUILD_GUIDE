@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# install-incus.sh — Install and bootstrap Incus on Ubuntu 24.04+
+# install-incus.sh — Ubuntu 24.04+: Install Incus + Btrfs storage + bridge networking
 # Options:
-#   --use-zabbly     Use Zabbly APT repo (feature releases)
+#   --use-zabbly     Use Zabbly repo (feature releases; also provides incus-ui-canonical)
 #   --with-vm        Install QEMU/OVMF for VM support
 #   --migrate        Install incus-tools (lxd-to-incus)
-#   --ui             Install Incus Web UI (requires Zabbly)
+#   --ui             Install Incus Web UI (requires --use-zabbly)
 #   --noninteractive Run 'incus admin init --minimal' non-interactively
 
 set -euo pipefail
@@ -31,19 +31,15 @@ if [[ $EUID -ne 0 ]]; then
   exec sudo -E bash "$0" "$@"
 fi
 
+# --- OS checks ---
 . /etc/os-release
-if [[ "${ID:-}" != "ubuntu" ]]; then
-  echo "This script targets Ubuntu. Detected ID=${ID:-unknown}." >&2
-  exit 1
-fi
-UBU_VER="${VERSION_ID:-0}"
-dpkg --compare-versions "$UBU_VER" ge "24.04" || { echo "Ubuntu $UBU_VER detected; need 24.04+." >&2; exit 1; }
+[[ "${ID:-}" == "ubuntu" ]] || { echo "This script targets Ubuntu; got ID=${ID:-?}." >&2; exit 1; }
+dpkg --compare-versions "${VERSION_ID:-0}" ge 24.04 || { echo "Need Ubuntu 24.04+." >&2; exit 1; }
 
 CALLER_USER=${SUDO_USER:-$USER}
 ARCH=$(dpkg --print-architecture)
-[[ "$ARCH" =~ ^(amd64|arm64)$ ]] || echo "Warning: architecture '$ARCH' may not have all packages."
 
-# Optional: Zabbly repo (Incus feature releases + Web UI)
+# --- Optional Zabbly repo (feature releases + Web UI) ---
 maybe_add_zabbly() {
   mkdir -p /etc/apt/keyrings
   curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
@@ -65,9 +61,10 @@ if [[ $WITH_UI -eq 1 && $NEED_ZABBLY -ne 1 ]]; then
 fi
 [[ $NEED_ZABBLY -eq 1 ]] && maybe_add_zabbly
 
-echo "Updating package lists..."
+echo "Updating APT..."
 apt-get update -y
 
+# --- Install packages ---
 PKGS=(incus)
 [[ $WITH_VM -eq 1 ]] && PKGS+=(qemu-system ovmf)
 [[ $WITH_MIGRATE -eq 1 ]] && PKGS+=(incus-tools)
@@ -76,51 +73,92 @@ PKGS=(incus)
 echo "Installing: ${PKGS[*]}"
 DEBIAN_FRONTEND=noninteractive apt-get install -y "${PKGS[@]}"
 
-# Ensure service is enabled and running
+# --- Enable & start incus service ---
 systemctl enable --now incus
 
-# Ensure group and add caller
+# --- Group + helper to run as user inside incus-admin group ---
 getent group incus-admin >/dev/null || groupadd -f incus-admin
 usermod -aG incus-admin "$CALLER_USER"
 
-# Helper: run a command as CALLER_USER inside incus-admin group (so no relogin needed)
 run_as_incus_admin() {
   local cmd="$1"
-  # Use 'sg' to switch to incus-admin group and 'sudo -u' to drop to the caller user
   sudo -u "$CALLER_USER" sg incus-admin -c "$cmd"
 }
 
-# Initialize immediately under correct group (no logout required)
+# --- Initialize Incus (minimal or interactive) ---
 if [[ $NONINTERACTIVE -eq 1 ]]; then
   echo "Running non-interactive init (minimal defaults) as $CALLER_USER..."
   run_as_incus_admin "incus admin init --minimal || true"
 else
-  echo "Running interactive initializer as $CALLER_USER (press Enter through defaults if unsure)..."
+  echo "Running interactive initializer as $CALLER_USER..."
   run_as_incus_admin "incus admin init || true"
 fi
 
-# Show socket perms and quick sanity checks
-echo "Verifying daemon and socket..."
+# --- Btrfs storage pool 'default' ---
+BTRFS_POOL=default
+BTRFS_PATH=/var/lib/incus/storage-pools/${BTRFS_POOL}
+
+echo "Configuring Btrfs storage pool '${BTRFS_POOL}' at ${BTRFS_PATH}..."
+# If pool already exists, skip creation
+if run_as_incus_admin "incus storage show ${BTRFS_POOL} >/dev/null 2>&1"; then
+  echo "Storage pool '${BTRFS_POOL}' already exists. Skipping create."
+else
+  # If the directory exists but is empty, remove so Incus can create/own it.
+  if [[ -d "${BTRFS_PATH}" ]]; then
+    if [[ -z "$(find "${BTRFS_PATH}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+      echo "Removing empty pre-created directory ${BTRFS_PATH} so Incus can create it..."
+      rmdir "${BTRFS_PATH}"
+    else
+      echo "ERROR: ${BTRFS_PATH} exists and is not empty. Please move its contents or choose another pool/path." >&2
+      exit 1
+    fi
+  fi
+  run_as_incus_admin "incus storage create ${BTRFS_POOL} btrfs source=${BTRFS_PATH}"
+fi
+
+# --- Ensure default profile has a root disk on that pool ---
+echo "Ensuring 'default' profile has root disk on pool '${BTRFS_POOL}'..."
+if run_as_incus_admin "incus profile show default | grep -q '^  root:'"; then
+  echo "Root disk already present on 'default' profile."
+else
+  run_as_incus_admin "incus profile device add default root disk path=/ pool=${BTRFS_POOL}"
+fi
+
+# --- Networking: create NAT bridge incusbr0 and attach to default profile ---
+BRIDGE=incusbr0
+echo "Configuring managed bridge '${BRIDGE}' (IPv4 NAT, no IPv6)..."
+if run_as_incus_admin "incus network show ${BRIDGE} >/dev/null 2>&1"; then
+  echo "Network '${BRIDGE}' already exists. Skipping create."
+else
+  run_as_incus_admin "incus network create ${BRIDGE} ipv4.address=auto ipv4.nat=true ipv6.address=none"
+fi
+
+echo "Ensuring 'default' profile has NIC 'eth0' on '${BRIDGE}'..."
+if run_as_incus_admin "incus profile show default | grep -q '^  eth0:'"; then
+  echo "NIC 'eth0' already present on 'default' profile."
+else
+  run_as_incus_admin "incus profile device add default eth0 nic nictype=bridged parent=${BRIDGE} name=eth0"
+fi
+
+# --- Status ---
+echo "Verifying daemon & socket..."
 ls -l /var/lib/incus/unix.socket || true
 systemctl --no-pager --full status incus | sed -n '1,12p' || true
 
-cat <<EOF
+cat <<'EOF'
 
-Done.
-User '$CALLER_USER' is in 'incus-admin' and initialization ran under that group,
-so you can use Incus immediately in this shell.
+All set ✅
 
-Quick test (run as $CALLER_USER):
-  incus version
+You can now launch a container with networking:
   incus launch images:ubuntu/24.04 demo
   incus list
 
-If you still get permission issues in an *existing* shell, run:
+If you open a *previously existing* shell and hit permissions, run:
   newgrp incus-admin
 
-Web UI (if installed):
+Web UI (if installed from Zabbly):
   incus webui
 
-LXD migration:
+Migrate from LXD:
   sudo lxd-to-incus
 EOF
