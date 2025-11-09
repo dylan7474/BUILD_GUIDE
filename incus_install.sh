@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install-incus.sh — Ubuntu 24.04+: Install Incus + Btrfs storage + bridge networking
 # Options:
-#   --use-zabbly     Use Zabbly repo (feature releases; also provides incus-ui-canonical)
+#   --use-zabbly     Use Zabbly repo (feature releases; provides incus-ui-canonical)
 #   --with-vm        Install QEMU/OVMF for VM support
 #   --migrate        Install incus-tools (lxd-to-incus)
 #   --ui             Install Incus Web UI (requires --use-zabbly)
@@ -37,7 +37,6 @@ fi
 dpkg --compare-versions "${VERSION_ID:-0}" ge 24.04 || { echo "Need Ubuntu 24.04+." >&2; exit 1; }
 
 CALLER_USER=${SUDO_USER:-$USER}
-ARCH=$(dpkg --print-architecture)
 
 # --- Optional Zabbly repo (feature releases + Web UI) ---
 maybe_add_zabbly() {
@@ -99,17 +98,15 @@ BTRFS_POOL=default
 BTRFS_PATH=/var/lib/incus/storage-pools/${BTRFS_POOL}
 
 echo "Configuring Btrfs storage pool '${BTRFS_POOL}' at ${BTRFS_PATH}..."
-# If pool already exists, skip creation
 if run_as_incus_admin "incus storage show ${BTRFS_POOL} >/dev/null 2>&1"; then
   echo "Storage pool '${BTRFS_POOL}' already exists. Skipping create."
 else
-  # If the directory exists but is empty, remove so Incus can create/own it.
   if [[ -d "${BTRFS_PATH}" ]]; then
     if [[ -z "$(find "${BTRFS_PATH}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
       echo "Removing empty pre-created directory ${BTRFS_PATH} so Incus can create it..."
       rmdir "${BTRFS_PATH}"
     else
-      echo "ERROR: ${BTRFS_PATH} exists and is not empty. Please move its contents or choose another pool/path." >&2
+      echo "ERROR: ${BTRFS_PATH} exists and is not empty. Move contents or choose another pool/path." >&2
       exit 1
     fi
   fi
@@ -155,6 +152,9 @@ You can now launch a container with networking:
 
 If you open a *previously existing* shell and hit permissions, run:
   newgrp incus-admin
+
+Autostart a container at boot (optional):
+  incus config set demo boot.autostart true
 
 Web UI (if installed from Zabbly):
   incus webui
